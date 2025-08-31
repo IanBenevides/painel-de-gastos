@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Meta tags para PWA -->
     <meta name="theme-color" content="#ffffff"/>
-    <link rel="apple-touch-icon" href="https://placehold.co/180x180/3B82F6/FFFFFF?text=$$">
     <title>Meus Gastos</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -148,360 +147,391 @@
 
 
     <script>
-        const MANIFEST_URL = 'manifest.json';
-        const CACHE_NAME = 'gastos-cache-v3'; // Versão do cache atualizada
-        const MANIFEST_CONTENT = {
-            "name": "Painel de Gastos",
-            "short_name": "Gastos",
-            "start_url": ".",
-            "display": "standalone",
-            "background_color": "#f3f4f6",
-            "theme_color": "#f3f4f6",
-            "description": "Seu resumo financeiro interativo para controle de despesas.",
-            "icons": [{
-                "src": "https://placehold.co/192x192/3B82F6/FFFFFF?text=$$",
-                "sizes": "192x192",
-                "type": "image/png"
-            }, {
-                "src": "https://placehold.co/512x512/3B82F6/FFFFFF?text=$$",
-                "sizes": "512x512",
-                "type": "image/png"
-            }]
+        // --- INÍCIO DA CONFIGURAÇÃO OFFLINE (PWA) ---
+        // Função para criar e registrar o Service Worker e o Manifest embutidos no HTML.
+        const setupPWA = () => {
+            // 1. Conteúdo do Manifest (define como o app se parece e se comporta ao ser "instalado")
+            const manifest = {
+                "name": "Painel de Gastos",
+                "short_name": "Gastos",
+                "start_url": ".",
+                "display": "standalone",
+                "background_color": "#f3f4f6",
+                "theme_color": "#f3f4f6",
+                "description": "Seu resumo financeiro interativo para controle de despesas.",
+                "icons": [{
+                    "src": "https://placehold.co/192x192/3B82F6/FFFFFF?text=$$",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }, {
+                    "src": "https://placehold.co/512x512/3B82F6/FFFFFF?text=$$",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }]
+            };
+
+            // Cria um link para o manifest e o adiciona ao <head>
+            const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const manifestURL = URL.createObjectURL(manifestBlob);
+            const linkManifest = document.createElement('link');
+            linkManifest.rel = 'manifest';
+            linkManifest.href = manifestURL;
+            document.head.appendChild(linkManifest);
+
+            // 2. Conteúdo do Service Worker (gerencia o cache para funcionamento offline)
+            const swCode = `
+                const CACHE_NAME = 'gastos-cache-v1';
+                // Lista de arquivos essenciais para o funcionamento do app offline
+                const urlsToCache = [
+                    './', // O próprio arquivo HTML
+                    'https://cdn.tailwindcss.com',
+                    'https://cdn.jsdelivr.net/npm/chart.js',
+                    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+                    'https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2' // Arquivo da fonte
+                ];
+
+                // Evento 'install': Salva os arquivos no cache
+                self.addEventListener('install', event => {
+                    event.waitUntil(
+                        caches.open(CACHE_NAME)
+                            .then(cache => {
+                                console.log('Cache aberto');
+                                return cache.addAll(urlsToCache);
+                            })
+                    );
+                });
+
+                // Evento 'fetch': Intercepta as requisições
+                self.addEventListener('fetch', event => {
+                    event.respondWith(
+                        // Tenta encontrar a resposta no cache primeiro
+                        caches.match(event.request)
+                            .then(response => {
+                                // Se encontrar no cache, retorna a resposta do cache
+                                if (response) {
+                                    return response;
+                                }
+                                // Se não, busca na rede
+                                return fetch(event.request);
+                            })
+                    );
+                });
+
+                 // Evento 'activate': Limpa caches antigos
+                self.addEventListener('activate', event => {
+                  const cacheWhitelist = [CACHE_NAME];
+                  event.waitUntil(
+                    caches.keys().then(cacheNames => {
+                      return Promise.all(
+                        cacheNames.map(cacheName => {
+                          if (cacheWhitelist.indexOf(cacheName) === -1) {
+                            return caches.delete(cacheName);
+                          }
+                        })
+                      );
+                    })
+                  );
+                });
+            `;
+            
+            // Registra o Service Worker se o navegador tiver suporte
+            if ('serviceWorker' in navigator) {
+                const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                const swURL = URL.createObjectURL(swBlob);
+                navigator.serviceWorker.register(swURL)
+                    .then(registration => {
+                        console.log('Service Worker registrado com sucesso:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Falha ao registrar o Service Worker:', error);
+                    });
+            }
         };
 
-        // --- LÓGICA DE ROTEAMENTO: SOU UM SERVICE WORKER OU UMA PÁGINA? ---
-        if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
-            // --- ESTE CÓDIGO RODA APENAS NO CONTEXTO DO SERVICE WORKER ---
-            const URLS_TO_CACHE = [
-                './',
-                'https://cdn.tailwindcss.com',
-                'https://cdn.jsdelivr.net/npm/chart.js',
-                'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
+        // Roda a configuração do PWA
+        setupPWA();
+
+        // --- FIM DA CONFIGURAÇÃO OFFLINE (PWA) ---
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Elementos do DOM
+            const totalSpentEl = document.getElementById('total-spent');
+            const remainingEl = document.getElementById('remaining');
+            const transactionsContainer = document.getElementById('transactions');
+            const addExpenseBtn = document.getElementById('add-expense-btn');
+            const modal = document.getElementById('expense-modal');
+            const modalContent = modal.querySelector('.modal-content');
+            const expenseForm = document.getElementById('expense-form');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const expenseIdInput = document.getElementById('expense-id');
+
+            // Novos elementos para o orçamento
+            const editBudgetBtn = document.getElementById('edit-budget-btn');
+            const budgetModal = document.getElementById('budget-modal');
+            const budgetModalContent = budgetModal.querySelector('.modal-content');
+            const budgetForm = document.getElementById('budget-form');
+            const cancelBudgetBtn = document.getElementById('cancel-budget-btn');
+            const budgetInput = document.getElementById('budget-input');
+
+            // Variáveis de estado
+            let expenses = [];
+            let totalBudget = 2400; // Valor inicial do ganho total
+            let chartInstance = null;
+            
+            // Dados iniciais (da planilha original)
+            const initialExpenses = [
+                { id: 1, date: '2025-08-07', category: 'Educação', description: 'Mensalidade Faculdade', value: 820 },
+                { id: 2, date: '2025-08-12', category: 'Saúde', description: 'Psicologa', value: 430 },
+                { id: 3, date: '2025-08-15', category: 'Transporte', description: 'Van Rodrigo', value: 400 },
+                { id: 4, date: '2025-08-20', category: 'Saúde', description: 'Academia', value: 130 },
             ];
 
-            self.addEventListener('install', event => {
-                event.waitUntil(
-                    caches.open(CACHE_NAME).then(cache => {
-                        console.log('Service Worker: Cache aberto e arquivos salvos.');
-                        return cache.addAll(URLS_TO_CACHE);
-                    })
-                );
-            });
+            // Paleta de cores para o gráfico
+            const chartColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
-            self.addEventListener('activate', event => {
-                event.waitUntil(
-                    caches.keys().then(cacheNames => {
-                        return Promise.all(
-                            cacheNames.map(cacheName => {
-                                if (cacheName !== CACHE_NAME) {
-                                    console.log('Service Worker: Limpando cache antigo:', cacheName);
-                                    return caches.delete(cacheName);
-                                }
-                            })
-                        );
-                    })
-                );
-                return self.clients.claim();
-            });
+            // Funções do Modal de Despesa
+            const openModal = () => {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modalContent.classList.remove('scale-95');
+                }, 10);
+            };
 
-            self.addEventListener('fetch', event => {
-                 // Se a requisição for para o manifest.json, gera a resposta dinamicamente.
-                if (new URL(event.request.url).pathname.endsWith(MANIFEST_URL)) {
-                    event.respondWith(
-                        new Response(JSON.stringify(MANIFEST_CONTENT), { headers: { 'Content-Type': 'application/json' } })
-                    );
+            const closeModal = () => {
+                modal.classList.add('opacity-0');
+                modalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    expenseForm.reset();
+                    expenseIdInput.value = '';
+                    modalTitle.textContent = 'Nova Despesa';
+                }, 300);
+            };
+
+            // Funções do Modal de Orçamento
+            const openBudgetModal = () => {
+                budgetInput.value = totalBudget; // Preenche o modal com o valor atual
+                budgetModal.classList.remove('hidden');
+                setTimeout(() => {
+                    budgetModal.classList.remove('opacity-0');
+                    budgetModalContent.classList.remove('scale-95');
+                }, 10);
+            };
+
+            const closeBudgetModal = () => {
+                budgetModal.classList.add('opacity-0');
+                budgetModalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    budgetModal.classList.add('hidden');
+                }, 300);
+            };
+
+            // Funções de manipulação de dados
+            const saveData = () => {
+                localStorage.setItem('myExpenses', JSON.stringify(expenses));
+                localStorage.setItem('myTotalBudget', totalBudget.toString());
+            };
+
+            const loadData = () => {
+                const savedExpenses = localStorage.getItem('myExpenses');
+                const savedBudget = localStorage.getItem('myTotalBudget');
+                
+                let dataWasLoaded = true;
+                if (savedExpenses) {
+                    expenses = JSON.parse(savedExpenses);
+                } else {
+                    expenses = initialExpenses;
+                    dataWasLoaded = false;
+                }
+
+                if (savedBudget) {
+                    totalBudget = parseFloat(savedBudget);
+                } else {
+                    totalBudget = 2400; // Um valor inicial padrão
+                    dataWasLoaded = false;
+                }
+
+                if (!dataWasLoaded) {
+                    saveData(); // Salva apenas se carregou os dados iniciais
+                }
+            };
+
+            // Funções de renderização
+            const renderSummary = () => {
+                const totalSpent = expenses.reduce((sum, exp) => sum + exp.value, 0);
+                const remaining = totalBudget - totalSpent;
+
+                totalSpentEl.textContent = `R$ ${totalSpent.toFixed(2).replace('.', ',')}`;
+                remainingEl.textContent = `R$ ${remaining.toFixed(2).replace('.', ',')}`;
+            };
+
+            const renderChart = () => {
+                const categories = {};
+                const categoryOrder = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'];
+                
+                categoryOrder.forEach(cat => categories[cat] = 0);
+
+                expenses.forEach(expense => {
+                    if (categories[expense.category] !== undefined) {
+                        categories[expense.category] += expense.value;
+                    } else {
+                        categories['Outros'] += expense.value;
+                    }
+                });
+
+                const chartLabels = Object.keys(categories);
+                const chartData = Object.values(categories);
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                const ctx = document.getElementById('category-chart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            data: chartData,
+                            backgroundColor: chartColors,
+                            borderColor: '#FFFFFF',
+                            borderWidth: 2,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' } },
+                            tooltip: { callbacks: { label: (c) => ` ${c.label}: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.parsed)}` } }
+                        }
+                    }
+                });
+            };
+
+            const renderTransactions = () => {
+                transactionsContainer.innerHTML = '';
+                if (expenses.length === 0) {
+                    transactionsContainer.innerHTML = '<p class="text-gray-500 text-center">Nenhuma despesa registrada.</p>';
                     return;
                 }
 
-                event.respondWith(
-                    caches.match(event.request).then(cachedResponse => {
-                        return cachedResponse || fetch(event.request).then(networkResponse => {
-                            if (networkResponse && networkResponse.status === 200) {
-                                const responseToCache = networkResponse.clone();
-                                caches.open(CACHE_NAME).then(cache => {
-                                    cache.put(event.request, responseToCache);
-                                });
-                            }
-                            return networkResponse;
-                        });
-                    })
-                );
+                expenses.sort((a, b) => b.id - a.id).forEach(expense => {
+                    const categoryIndex = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'].indexOf(expense.category);
+                    const color = chartColors[categoryIndex % chartColors.length];
+
+                    const transactionElement = document.createElement('div');
+                    transactionElement.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-fade-in';
+                    transactionElement.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                             <div class="p-2 rounded-full" style="background-color: ${color}20;">
+                                 <svg class="w-5 h-5" style="color: ${color};" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                             </div>
+                             <div>
+                                 <p class="font-medium text-gray-800">${expense.description}</p>
+                                 <p class="text-sm text-gray-500">${expense.category}</p>
+                             </div>
+                         </div>
+                         <div class="flex items-center space-x-2">
+                             <p class="font-semibold text-red-500">- R$ ${expense.value.toFixed(2).replace('.', ',')}</p>
+                             <button class="edit-btn p-1 text-gray-400 hover:text-blue-500" data-id="${expense.id}">
+                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.732 3.732z"></path></svg>
+                             </button>
+                             <button class="delete-btn p-1 text-gray-400 hover:text-red-500" data-id="${expense.id}">
+                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                             </button>
+                         </div>
+                    `;
+                    transactionsContainer.appendChild(transactionElement);
+                });
+            };
+            
+            const refreshUI = () => {
+                renderSummary();
+                renderChart();
+                renderTransactions();
+            };
+
+            // Manipuladores de Eventos
+            addExpenseBtn.addEventListener('click', () => {
+                modalTitle.textContent = 'Nova Despesa';
+                openModal();
+            });
+            
+            cancelBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
             });
 
-        } else {
-            // --- ESTE CÓDIGO RODA APENAS NA PÁGINA (BROWSER) ---
-
-            // Adiciona o link do manifest ao <head>
-            const linkManifest = document.createElement('link');
-            linkManifest.rel = 'manifest';
-            linkManifest.href = MANIFEST_URL;
-            document.head.appendChild(linkManifest);
-
-            // Registra o Service Worker (o próprio arquivo HTML)
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                     navigator.serviceWorker.register(location.href)
-                        .then(registration => console.log('Service Worker registrado com sucesso:', registration))
-                        .catch(error => console.log('Falha ao registrar o Service Worker:', error));
-                });
-            }
-
-            // Lógica principal do aplicativo
-            document.addEventListener('DOMContentLoaded', () => {
-                const totalSpentEl = document.getElementById('total-spent');
-                const remainingEl = document.getElementById('remaining');
-                const transactionsContainer = document.getElementById('transactions');
-                const addExpenseBtn = document.getElementById('add-expense-btn');
-                const modal = document.getElementById('expense-modal');
-                const modalContent = modal.querySelector('.modal-content');
-                const expenseForm = document.getElementById('expense-form');
-                const cancelBtn = document.getElementById('cancel-btn');
-                const modalTitle = document.getElementById('modal-title');
-                const expenseIdInput = document.getElementById('expense-id');
-                const editBudgetBtn = document.getElementById('edit-budget-btn');
-                const budgetModal = document.getElementById('budget-modal');
-                const budgetModalContent = budgetModal.querySelector('.modal-content');
-                const budgetForm = document.getElementById('budget-form');
-                const cancelBudgetBtn = document.getElementById('cancel-budget-btn');
-                const budgetInput = document.getElementById('budget-input');
-
-                let expenses = [];
-                let totalBudget = 2400;
-                let chartInstance = null;
-
-                const initialExpenses = [
-                    { id: 1, date: '2025-08-07', category: 'Educação', description: 'Mensalidade Faculdade', value: 820 },
-                    { id: 2, date: '2025-08-12', category: 'Saúde', description: 'Psicologa', value: 430 },
-                    { id: 3, date: '2025-08-15', category: 'Transporte', description: 'Van Rodrigo', value: 400 },
-                    { id: 4, date: '2025-08-20', category: 'Saúde', description: 'Academia', value: 130 },
-                ];
-                const chartColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
-
-                const openModal = () => {
-                    modal.classList.remove('hidden');
-                    setTimeout(() => {
-                        modal.classList.remove('opacity-0');
-                        modalContent.classList.remove('scale-95');
-                    }, 10);
+            expenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = expenseIdInput.value;
+                const newExpense = {
+                    description: expenseForm.description.value,
+                    value: parseFloat(expenseForm.value.value),
+                    category: expenseForm.category.value,
                 };
 
-                const closeModal = () => {
-                    modal.classList.add('opacity-0');
-                    modalContent.classList.add('scale-95');
-                    setTimeout(() => {
-                        modal.classList.add('hidden');
-                        expenseForm.reset();
-                        expenseIdInput.value = '';
-                        modalTitle.textContent = 'Nova Despesa';
-                    }, 300);
-                };
+                if (id) { // Editando
+                    const index = expenses.findIndex(exp => exp.id == id);
+                    expenses[index] = { ...expenses[index], ...newExpense };
+                } else { // Adicionando
+                    newExpense.id = new Date().getTime();
+                    expenses.push(newExpense);
+                }
 
-                const openBudgetModal = () => {
-                    budgetInput.value = totalBudget;
-                    budgetModal.classList.remove('hidden');
-                    setTimeout(() => {
-                        budgetModal.classList.remove('opacity-0');
-                        budgetModalContent.classList.remove('scale-95');
-                    }, 10);
-                };
+                saveData();
+                refreshUI();
+                closeModal();
+            });
 
-                const closeBudgetModal = () => {
-                    budgetModal.classList.add('opacity-0');
-                    budgetModalContent.classList.add('scale-95');
-                    setTimeout(() => {
-                        budgetModal.classList.add('hidden');
-                    }, 300);
-                };
+            transactionsContainer.addEventListener('click', (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
 
-                const saveData = () => {
-                    localStorage.setItem('myExpenses', JSON.stringify(expenses));
-                    localStorage.setItem('myTotalBudget', totalBudget.toString());
-                };
-
-                const loadData = () => {
-                    const savedExpenses = localStorage.getItem('myExpenses');
-                    const savedBudget = localStorage.getItem('myTotalBudget');
-                    
-                    let dataWasLoaded = true;
-                    if (savedExpenses) {
-                        expenses = JSON.parse(savedExpenses);
-                    } else {
-                        expenses = initialExpenses;
-                        dataWasLoaded = false;
-                    }
-
-                    if (savedBudget) {
-                        totalBudget = parseFloat(savedBudget);
-                    } else {
-                        totalBudget = 2400;
-                        dataWasLoaded = false;
-                    }
-
-                    if (!dataWasLoaded) {
-                        saveData();
-                    }
-                };
-
-                const renderSummary = () => {
-                    const totalSpent = expenses.reduce((sum, exp) => sum + exp.value, 0);
-                    const remaining = totalBudget - totalSpent;
-
-                    totalSpentEl.textContent = `R$ ${totalSpent.toFixed(2).replace('.', ',')}`;
-                    remainingEl.textContent = `R$ ${remaining.toFixed(2).replace('.', ',')}`;
-                };
-
-                const renderChart = () => {
-                    const categories = {};
-                    const categoryOrder = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'];
-                    
-                    categoryOrder.forEach(cat => categories[cat] = 0);
-
-                    expenses.forEach(expense => {
-                        categories[expense.category] = (categories[expense.category] || 0) + expense.value;
-                    });
-
-                    const chartLabels = Object.keys(categories);
-                    const chartData = Object.values(categories);
-
-                    if (chartInstance) {
-                        chartInstance.destroy();
-                    }
-
-                    const ctx = document.getElementById('category-chart').getContext('2d');
-                    chartInstance = new Chart(ctx, {
-                        type: 'doughnut',
-                        data: {
-                            labels: chartLabels,
-                            datasets: [{
-                                data: chartData,
-                                backgroundColor: chartColors,
-                                borderColor: '#FFFFFF',
-                                borderWidth: 2,
-                                hoverOffset: 4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' } },
-                                tooltip: { callbacks: { label: (c) => ` ${c.label}: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.parsed)}` } }
-                            }
-                        }
-                    });
-                };
-
-                const renderTransactions = () => {
-                    transactionsContainer.innerHTML = '';
-                    if (expenses.length === 0) {
-                        transactionsContainer.innerHTML = '<p class="text-gray-500 text-center">Nenhuma despesa registrada.</p>';
-                        return;
-                    }
-
-                    expenses.sort((a, b) => b.id - a.id).forEach(expense => {
-                        const categoryIndex = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'].indexOf(expense.category);
-                        const color = chartColors[categoryIndex % chartColors.length];
-
-                        const transactionElement = document.createElement('div');
-                        transactionElement.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-fade-in';
-                        transactionElement.innerHTML = `
-                            <div class="flex items-center space-x-3">
-                                <div class="p-2 rounded-full" style="background-color: ${color}20;">
-                                    <svg class="w-5 h-5" style="color: ${color};" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-800">${expense.description}</p>
-                                    <p class="text-sm text-gray-500">${expense.category}</p>
-                                </div>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <p class="font-semibold text-red-500">- R$ ${expense.value.toFixed(2).replace('.', ',')}</p>
-                                <button class="edit-btn p-1 text-gray-400 hover:text-blue-500" data-id="${expense.id}">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.732 3.732z"></path></svg>
-                                </button>
-                                <button class="delete-btn p-1 text-gray-400 hover:text-red-500" data-id="${expense.id}">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                </button>
-                            </div>
-                        `;
-                        transactionsContainer.appendChild(transactionElement);
-                    });
-                };
-                
-                const refreshUI = () => {
-                    renderSummary();
-                    renderChart();
-                    renderTransactions();
-                };
-
-                addExpenseBtn.addEventListener('click', () => {
-                    modalTitle.textContent = 'Nova Despesa';
-                    openModal();
-                });
-                
-                cancelBtn.addEventListener('click', closeModal);
-                modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-                expenseForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const id = expenseIdInput.value;
-                    const newExpense = {
-                        description: expenseForm.description.value,
-                        value: parseFloat(expenseForm.value.value),
-                        category: expenseForm.category.value,
-                    };
-
-                    if (id) {
-                        const index = expenses.findIndex(exp => exp.id == id);
-                        expenses[index] = { ...expenses[index], ...newExpense };
-                    } else {
-                        newExpense.id = new Date().getTime();
-                        expenses.push(newExpense);
-                    }
-
+                const id = target.dataset.id;
+                if (target.classList.contains('delete-btn')) {
+                    expenses = expenses.filter(exp => exp.id != id);
                     saveData();
                     refreshUI();
-                    closeModal();
-                });
-
-                transactionsContainer.addEventListener('click', (e) => {
-                    const target = e.target.closest('button');
-                    if (!target) return;
-                    const id = target.dataset.id;
-                    if (target.classList.contains('delete-btn')) {
-                        expenses = expenses.filter(exp => exp.id != id);
-                        saveData();
-                        refreshUI();
-                    } else if (target.classList.contains('edit-btn')) {
-                        const expense = expenses.find(exp => exp.id == id);
-                        expenseIdInput.value = expense.id;
-                        expenseForm.description.value = expense.description;
-                        expenseForm.value.value = expense.value;
-                        expenseForm.category.value = expense.category;
-                        modalTitle.textContent = 'Editar Despesa';
-                        openModal();
-                    }
-                });
-                
-                editBudgetBtn.addEventListener('click', openBudgetModal);
-                cancelBudgetBtn.addEventListener('click', closeBudgetModal);
-                budgetModal.addEventListener('click', (e) => { if (e.target === budgetModal) closeBudgetModal(); });
-
-                budgetForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const newBudget = parseFloat(budgetInput.value);
-                    if (!isNaN(newBudget) && newBudget >= 0) {
-                        totalBudget = newBudget;
-                        saveData();
-                        refreshUI();
-                        closeBudgetModal();
-                    }
-                });
-
-                loadData();
-                refreshUI();
+                } else if (target.classList.contains('edit-btn')) {
+                    const expense = expenses.find(exp => exp.id == id);
+                    expenseIdInput.value = expense.id;
+                    expenseForm.description.value = expense.description;
+                    expenseForm.value.value = expense.value;
+                    expenseForm.category.value = expense.category;
+                    modalTitle.textContent = 'Editar Despesa';
+                    openModal();
+                }
             });
-        }
+
+            // Novos manipuladores de evento para o orçamento
+            editBudgetBtn.addEventListener('click', openBudgetModal);
+
+            cancelBudgetBtn.addEventListener('click', closeBudgetModal);
+            budgetModal.addEventListener('click', (e) => {
+                if (e.target === budgetModal) closeBudgetModal();
+            });
+
+            budgetForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newBudget = parseFloat(budgetInput.value);
+                if (!isNaN(newBudget) && newBudget >= 0) {
+                    totalBudget = newBudget;
+                    saveData();
+                    refreshUI();
+                    closeBudgetModal();
+                }
+            });
+
+            // Inicialização
+            loadData();
+            refreshUI();
+        });
     </script>
 </body>
 </html>
