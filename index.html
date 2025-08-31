@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Gastos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease-in-out;
+        }
+        /* Estilos para o Modal */
+        #expense-modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto max-w-lg p-4">
+        <!-- Cabeçalho -->
+        <header class="text-center my-6">
+            <h1 class="text-3xl font-bold text-gray-800">Painel de Gastos</h1>
+            <p class="text-gray-500">Seu resumo financeiro interativo</p>
+        </header>
+
+        <!-- Container Principal -->
+        <div class="bg-white rounded-2xl shadow-lg p-6">
+
+            <!-- Resumo Financeiro -->
+            <section id="summary" class="mb-8">
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-red-50 p-4 rounded-xl">
+                        <h3 class="text-sm font-medium text-red-500">Total Gasto</h3>
+                        <p id="total-spent" class="text-2xl font-semibold text-red-600">R$ 0,00</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-xl">
+                        <h3 class="text-sm font-medium text-green-500">Restante</h3>
+                        <p id="remaining" class="text-2xl font-semibold text-green-600">R$ 0,00</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Gráfico de Categorias -->
+            <section id="chart-container" class="mb-8">
+                 <h2 class="text-xl font-semibold text-gray-700 mb-4 text-center">Gastos por Categoria</h2>
+                <div class="w-full h-64 flex justify-center items-center">
+                    <canvas id="category-chart"></canvas>
+                </div>
+            </section>
+
+            <!-- Lista de Despesas -->
+            <section id="expense-list">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Detalhes das Despesas</h2>
+                <div id="transactions" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    <!-- As transações serão inseridas aqui via JavaScript -->
+                </div>
+            </section>
+        </div>
+         <footer class="text-center text-gray-400 text-xs mt-6 pb-4">
+            <p>Seus dados são salvos no seu navegador.</p>
+        </footer>
+    </div>
+
+    <!-- Botão para Adicionar Despesa -->
+    <button id="add-expense-btn" class="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-transform transform hover:scale-110">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+    </button>
+
+    <!-- Modal para Adicionar/Editar Despesa -->
+    <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content bg-white rounded-2xl shadow-xl p-6 w-full max-w-md transform scale-95">
+            <h2 id="modal-title" class="text-2xl font-bold text-gray-800 mb-6">Nova Despesa</h2>
+            <form id="expense-form">
+                <input type="hidden" id="expense-id">
+                <div class="mb-4">
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                    <input type="text" id="description" name="description" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label for="value" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+                    <input type="number" id="value" name="value" step="0.01" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                    <select id="category" name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                        <option>Educação</option>
+                        <option>Saúde</option>
+                        <option>Transporte</option>
+                        <option>Alimentação</option>
+                        <option>Lazer</option>
+                        <option>Outros</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-btn" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancelar</button>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Elementos do DOM
+            const totalSpentEl = document.getElementById('total-spent');
+            const remainingEl = document.getElementById('remaining');
+            const transactionsContainer = document.getElementById('transactions');
+            const addExpenseBtn = document.getElementById('add-expense-btn');
+            const modal = document.getElementById('expense-modal');
+            const modalContent = modal.querySelector('.modal-content');
+            const expenseForm = document.getElementById('expense-form');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const expenseIdInput = document.getElementById('expense-id');
+
+            // Variáveis de estado
+            let expenses = [];
+            let remainingAmount = 620; // Valor inicial do "RESTANTE" da planilha
+            let chartInstance = null;
+            
+            // Dados iniciais (da planilha original)
+            const initialExpenses = [
+                { id: 1, date: '2025-08-07', category: 'Educação', description: 'Mensalidade Faculdade', value: 820 },
+                { id: 2, date: '2025-08-12', category: 'Saúde', description: 'Psicologa', value: 430 },
+                { id: 3, date: '2025-08-15', category: 'Transporte', description: 'Van Rodrigo', value: 400 },
+                { id: 4, date: '2025-08-20', category: 'Saúde', description: 'Academia', value: 130 },
+            ];
+
+            // Paleta de cores para o gráfico
+            const chartColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+
+            // Funções do Modal
+            const openModal = () => {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modalContent.classList.remove('scale-95');
+                }, 10);
+            };
+
+            const closeModal = () => {
+                modal.classList.add('opacity-0');
+                modalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    expenseForm.reset();
+                    expenseIdInput.value = '';
+                    modalTitle.textContent = 'Nova Despesa';
+                }, 300);
+            };
+
+            // Funções de manipulação de dados
+            const saveData = () => {
+                localStorage.setItem('myExpenses', JSON.stringify(expenses));
+            };
+
+            const loadData = () => {
+                const savedExpenses = localStorage.getItem('myExpenses');
+                if (savedExpenses) {
+                    expenses = JSON.parse(savedExpenses);
+                } else {
+                    expenses = initialExpenses; // Carrega dados iniciais se não houver nada salvo
+                    saveData();
+                }
+            };
+
+            // Funções de renderização
+            const renderSummary = () => {
+                const totalSpent = expenses.reduce((sum, exp) => sum + exp.value, 0);
+                totalSpentEl.textContent = `R$ ${totalSpent.toFixed(2).replace('.', ',')}`;
+                remainingEl.textContent = `R$ ${remainingAmount.toFixed(2).replace('.', ',')}`; // Valor fixo por enquanto
+            };
+
+            const renderChart = () => {
+                const categories = {};
+                const categoryOrder = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'];
+                
+                categoryOrder.forEach(cat => categories[cat] = 0);
+
+                expenses.forEach(expense => {
+                    if (categories[expense.category] !== undefined) {
+                        categories[expense.category] += expense.value;
+                    } else {
+                        categories['Outros'] += expense.value;
+                    }
+                });
+
+                const chartLabels = Object.keys(categories);
+                const chartData = Object.values(categories);
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                const ctx = document.getElementById('category-chart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            data: chartData,
+                            backgroundColor: chartColors,
+                            borderColor: '#FFFFFF',
+                            borderWidth: 2,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' } },
+                            tooltip: { callbacks: { label: (c) => ` ${c.label}: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.parsed)}` } }
+                        }
+                    }
+                });
+            };
+
+            const renderTransactions = () => {
+                transactionsContainer.innerHTML = '';
+                if (expenses.length === 0) {
+                    transactionsContainer.innerHTML = '<p class="text-gray-500 text-center">Nenhuma despesa registrada.</p>';
+                    return;
+                }
+
+                expenses.sort((a, b) => b.id - a.id).forEach(expense => {
+                    const categoryIndex = ['Educação', 'Saúde', 'Transporte', 'Alimentação', 'Lazer', 'Outros'].indexOf(expense.category);
+                    const color = chartColors[categoryIndex % chartColors.length];
+
+                    const transactionElement = document.createElement('div');
+                    transactionElement.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-fade-in';
+                    transactionElement.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                             <div class="p-2 rounded-full" style="background-color: ${color}20;">
+                                <svg class="w-5 h-5" style="color: ${color};" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-800">${expense.description}</p>
+                                <p class="text-sm text-gray-500">${expense.category}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <p class="font-semibold text-red-500">- R$ ${expense.value.toFixed(2).replace('.', ',')}</p>
+                            <button class="edit-btn p-1 text-gray-400 hover:text-blue-500" data-id="${expense.id}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.732 3.732z"></path></svg>
+                            </button>
+                            <button class="delete-btn p-1 text-gray-400 hover:text-red-500" data-id="${expense.id}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    `;
+                    transactionsContainer.appendChild(transactionElement);
+                });
+            };
+            
+            const refreshUI = () => {
+                renderSummary();
+                renderChart();
+                renderTransactions();
+            };
+
+            // Manipuladores de Eventos
+            addExpenseBtn.addEventListener('click', () => {
+                modalTitle.textContent = 'Nova Despesa';
+                openModal();
+            });
+            
+            cancelBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+
+            expenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = expenseIdInput.value;
+                const newExpense = {
+                    description: expenseForm.description.value,
+                    value: parseFloat(expenseForm.value.value),
+                    category: expenseForm.category.value,
+                };
+
+                if (id) { // Editando
+                    const index = expenses.findIndex(exp => exp.id == id);
+                    expenses[index] = { ...expenses[index], ...newExpense };
+                } else { // Adicionando
+                    newExpense.id = new Date().getTime();
+                    expenses.push(newExpense);
+                }
+
+                saveData();
+                refreshUI();
+                closeModal();
+            });
+
+            transactionsContainer.addEventListener('click', (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+
+                const id = target.dataset.id;
+                if (target.classList.contains('delete-btn')) {
+                    expenses = expenses.filter(exp => exp.id != id);
+                    saveData();
+                    refreshUI();
+                } else if (target.classList.contains('edit-btn')) {
+                    const expense = expenses.find(exp => exp.id == id);
+                    expenseIdInput.value = expense.id;
+                    expenseForm.description.value = expense.description;
+                    expenseForm.value.value = expense.value;
+                    expenseForm.category.value = expense.category;
+                    modalTitle.textContent = 'Editar Despesa';
+                    openModal();
+                }
+            });
+
+            // Inicialização
+            loadData();
+            refreshUI();
+        });
+    </script>
+</body>
+</html>
+
