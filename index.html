@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Meta tags para PWA -->
+    <meta name="theme-color" content="#ffffff"/>
     <title>Meus Gastos</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -145,6 +147,113 @@
 
 
     <script>
+        // --- INÍCIO DA CONFIGURAÇÃO OFFLINE (PWA) ---
+        // Função para criar e registrar o Service Worker e o Manifest embutidos no HTML.
+        const setupPWA = () => {
+            // 1. Conteúdo do Manifest (define como o app se parece e se comporta ao ser "instalado")
+            const manifest = {
+                "name": "Painel de Gastos",
+                "short_name": "Gastos",
+                "start_url": ".",
+                "display": "standalone",
+                "background_color": "#f3f4f6",
+                "theme_color": "#f3f4f6",
+                "description": "Seu resumo financeiro interativo para controle de despesas.",
+                "icons": [{
+                    "src": "https://placehold.co/192x192/3B82F6/FFFFFF?text=$$",
+                    "sizes": "192x192",
+                    "type": "image/png"
+                }, {
+                    "src": "https://placehold.co/512x512/3B82F6/FFFFFF?text=$$",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }]
+            };
+
+            // Cria um link para o manifest e o adiciona ao <head>
+            const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const manifestURL = URL.createObjectURL(manifestBlob);
+            const linkManifest = document.createElement('link');
+            linkManifest.rel = 'manifest';
+            linkManifest.href = manifestURL;
+            document.head.appendChild(linkManifest);
+
+            // 2. Conteúdo do Service Worker (gerencia o cache para funcionamento offline)
+            const swCode = `
+                const CACHE_NAME = 'gastos-cache-v1';
+                // Lista de arquivos essenciais para o funcionamento do app offline
+                const urlsToCache = [
+                    './', // O próprio arquivo HTML
+                    'https://cdn.tailwindcss.com',
+                    'https://cdn.jsdelivr.net/npm/chart.js',
+                    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+                    'https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2' // Arquivo da fonte
+                ];
+
+                // Evento 'install': Salva os arquivos no cache
+                self.addEventListener('install', event => {
+                    event.waitUntil(
+                        caches.open(CACHE_NAME)
+                            .then(cache => {
+                                console.log('Cache aberto');
+                                return cache.addAll(urlsToCache);
+                            })
+                    );
+                });
+
+                // Evento 'fetch': Intercepta as requisições
+                self.addEventListener('fetch', event => {
+                    event.respondWith(
+                        // Tenta encontrar a resposta no cache primeiro
+                        caches.match(event.request)
+                            .then(response => {
+                                // Se encontrar no cache, retorna a resposta do cache
+                                if (response) {
+                                    return response;
+                                }
+                                // Se não, busca na rede
+                                return fetch(event.request);
+                            })
+                    );
+                });
+
+                 // Evento 'activate': Limpa caches antigos
+                self.addEventListener('activate', event => {
+                  const cacheWhitelist = [CACHE_NAME];
+                  event.waitUntil(
+                    caches.keys().then(cacheNames => {
+                      return Promise.all(
+                        cacheNames.map(cacheName => {
+                          if (cacheWhitelist.indexOf(cacheName) === -1) {
+                            return caches.delete(cacheName);
+                          }
+                        })
+                      );
+                    })
+                  );
+                });
+            `;
+            
+            // Registra o Service Worker se o navegador tiver suporte
+            if ('serviceWorker' in navigator) {
+                const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                const swURL = URL.createObjectURL(swBlob);
+                navigator.serviceWorker.register(swURL)
+                    .then(registration => {
+                        console.log('Service Worker registrado com sucesso:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Falha ao registrar o Service Worker:', error);
+                    });
+            }
+        };
+
+        // Roda a configuração do PWA
+        setupPWA();
+
+        // --- FIM DA CONFIGURAÇÃO OFFLINE (PWA) ---
+
+
         document.addEventListener('DOMContentLoaded', () => {
             // Elementos do DOM
             const totalSpentEl = document.getElementById('total-spent');
